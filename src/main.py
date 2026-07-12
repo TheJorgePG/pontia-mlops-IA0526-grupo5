@@ -3,8 +3,8 @@ import os
 import time
 import platform
 import joblib
-import mlflow
-import mlflow.sklearn
+# import mlflow
+# import mlflow.sklearn
 from pathlib import Path
 from datetime import datetime
 from data_loader import load_data, preprocess_data
