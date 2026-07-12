@@ -32,8 +32,8 @@ def preprocess_data(train_df, test_df):
         test_df[col] = le.transform(test_df[col])
         label_encoders[col] = le
 
-    train_df["income"] = train_df["income"].apply(lambda x: 1 if x == ">50K" else 0)
-    test_df["income"] = test_df["income"].apply(lambda x: 1 if x == ">50K" else 0)
+    train_df["income"] = train_df["income"].apply(lambda x: 1 if x == ">20K" else 0)
+    test_df["income"] = test_df["income"].apply(lambda x: 1 if x == ">20K" else 0)
 
     X_train = train_df.drop("income", axis=1)
     y_train = train_df["income"]
