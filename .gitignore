@@ -1,0 +1,82 @@
+# --- ML & data artifacts ---
+mlruns/
+artifacts/
+models/
+*.log
+*.h5
+*.pkl
+*.joblib
+*.ckpt
+
+# --- Data files ---
+data/
+*.csv
+*.tsv
+*.json
+*.xlsx
+*.parquet
+*.zip
+*.gz
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+build/
+dist/
+
+# --- Virtual environments ---
+.env
+.venv/
+env/
+venv/
+ENV/
+*.env
+
+# --- Jupyter and notebooks ---
+.ipynb_checkpoints/
+*.nbconvert.ipynb
+
+
+
+# --- Experiment configs ---
+*.tfvars
+*.tfplan
+
+# --- VSCode ---
+.vscode/
+
+# --- PyCharm ---
+.idea/
+
+# --- OS-specific ---
+.DS_Store
+Thumbs.db
+
+# --- Test outputs ---
+coverage.xml
+.cache/
+pytest_cache/
+htmlcov/
+*.cover
+*.coverage
+
+# --- Docker ---
+*.pid
+*.log
+docker-compose.override.yml
+
+# --- Terraform (if used) ---
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# --- CI/CD secrets ---
+*.pem
+*.key
+.envrc
+.env.*

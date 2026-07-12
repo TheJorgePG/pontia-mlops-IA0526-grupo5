@@ -1,0 +1,141 @@
+name: Deploy Model
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  CONTAINER_APP_NAME: ca-ml-api-grupo05
+  RESOURCE_GROUP: rg-gcortina-devops
+  REGION: spaincentral
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GH_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Lowercase repository name for Docker
+        run: |
+          echo "IMAGE_REPOSITORY=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}"
+          docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:${{ github.run_number }} -f ./deployment/Dockerfile .
+          docker push $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${{ github.run_number }}
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Container App
+        run: |
+          IMAGE_URI="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}:${{ github.run_number }}"
+          
+          # EXTRACT INDIVIDUAL AUTH FIELDS OUT OF YOUR EXISTING JSON SECRET
+          SP_TENANT=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r '.tenantId')
+          SP_CLIENT=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r '.clientId')
+          SP_SECRET=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | jq -r '.clientSecret')
+
+          # 1. LINK REGISTRY CREDENTIALS
+          az containerapp registry set \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --server ${{ env.REGISTRY }} \
+            --username ${{ github.actor }} \
+            --password ${{ secrets.GH_PAT }}
+          
+          # 2. GENERATE CONFIGURATION TEMPLATE
+          cat <<EOF > app-template.yaml
+          properties:
+            configuration:
+              activeRevisionsMode: Single
+              ingress:
+                external: true
+                targetPort: 8080
+                transport: Auto
+                traffic:
+                  - latestRevision: true
+                    weight: 100
+            template:
+              containers:
+                - name: api
+                  image: ${IMAGE_URI}
+                  resources:
+                    cpu: 0.5
+                    memory: 1.0Gi
+                  env:
+                    - name: MLFLOW_TRACKING_URL
+                      value: '${{ secrets.MLFLOW_TRACKING_URL }}'
+                    - name: MODEL_URI
+                      value: 'models:/${{ vars.MODEL_NAME }}/Production'
+                    - name: AZURE_TENANT_ID
+                      value: "${SP_TENANT}"
+                    - name: AZURE_CLIENT_ID
+                      value: "${SP_CLIENT}"
+                    - name: AZURE_CLIENT_SECRET
+                      value: "${SP_SECRET}"
+              scale:
+                minReplicas: 1
+                maxReplicas: 2
+          EOF
+          
+          # 3. OVERWRITE MANIFEST INFRASTRUCTURE
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --yaml app-template.yaml
+
+      - name: Wait for container to be fully operational
+        run: |
+          # 1. Fetch the absolute URL
+          FQDN=$(az containerapp show \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          CLEAN_URL="https://${FQDN}/health"
+          
+          echo "Checking app deployment status at: $CLEAN_URL"
+          
+          # 2. Poll the /health endpoint until it returns a successful 200 OK
+          MAX_ATTEMPTS=30
+          ATTEMPT=1
+          SUCCESS=false
+          
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Attempt $ATTEMPT of $MAX_ATTEMPTS: Probing endpoint..."
+            
+            # Send curl request, extract HTTP status code, silent mode
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$CLEAN_URL" || echo "000")
+            
+            if [ "$HTTP_STATUS" -eq 200 ]; then
+              echo "API is live and model is fully loaded! (Received HTTP 200)"
+              SUCCESS=true
+              break
+            else
+              echo "Endpoint returned HTTP $HTTP_STATUS. App is likely downloading ML model..."
+              sleep 10
+              ATTEMPT=$((ATTEMPT+1))
+            fi
+          done
+          
+          if [ "$SUCCESS" = false ]; then
+            echo "Error: App failed to become healthy within the timeout window."
+            exit 1
+          fi
+
+      - name: Print Swagger Confirmation
+        run: |
+          FQDN=$(az containerapp show \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "Production Swagger UI available at: https://${FQDN}/docs"
