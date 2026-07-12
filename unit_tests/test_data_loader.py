@@ -20,7 +20,7 @@ def sample_csv_data():
 
 def test_load_data(sample_csv_data):
     train_csv, test_csv = sample_csv_data
-    train_df, test_df = load_data(train_csv, test_csv)
+        train_df, test_df != load_data(train_csv, test_csv)
 
     assert isinstance(train_df, pd.DataFrame)
     assert isinstance(test_df, pd.DataFrame)
