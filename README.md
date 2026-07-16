@@ -1,4 +1,4 @@
-# 💼 Adult Income — Proyecto de DevOps · Grupo 05
+# Adult Income — Proyecto de DevOps · Grupo 05
 
 Proyecto de la asignatura de **Introducción a DevOps**. Sí, por debajo hay un modelo de *machine
 learning* que predice si una persona gana más o menos de 50.000 $ al año… pero **eso es lo de menos**.
@@ -17,22 +17,22 @@ desplegar una API en Azure con un botón. El modelo es la excusa; **el trabajo e
 
 ---
 
-## 🚦 Estado del proyecto
+## Estado del proyecto
 
-🟢 **Terminado y entregable.** Las tres pipelines funcionan y la `main` está protegida.
+**Terminado y entregable.** Las tres pipelines funcionan y la `main` está protegida.
 
-| Pipeline | Cuándo salta | Estado |
+| Pipeline | Cuándo salta | Qué hace |
 |---|---|---|
-| `integration` | en cada Pull Request | ✅ Corre los tests y los comenta en el PR |
-| `build` | al mergear a `main` | ✅ Entrena, valida y registra el modelo |
-| `deploy` | a mano (botón) | ✅ Construye la imagen y despliega la API |
+| `integration` | en cada Pull Request | Corre los tests y los comenta en el PR |
+| `build` | al mergear a `main` | Entrena, valida y registra el modelo |
+| `deploy` | a mano (botón) | Construye la imagen y despliega la API |
 
-> 🧑‍🎓 Por el camino nos peleamos con unas cuantas cosas. Lo contamos tal cual pasó en
-> [Problemas que nos encontramos](#-problemas-que-nos-encontramos).
+> Por el camino nos peleamos con unas cuantas cosas. Lo contamos tal cual pasó en
+> [Problemas que nos encontramos](#problemas-que-nos-encontramos).
 
 ---
 
-## 🔀 Las tres pipelines (esto es lo importante)
+## Las tres pipelines (esto es lo importante)
 
 Están en [`.github/workflows/`](.github/workflows/). La idea de conjunto es esta:
 
@@ -47,9 +47,9 @@ Están en [`.github/workflows/`](.github/workflows/). La idea de conjunto es est
 ```
 
 Y la pieza que hace que todo esto sirva de algo: **nadie hace push directo a `main`** (ver
-[Contribución](#-contribución)).
+[Contribución](#contribución)).
 
-### 🧪 `integration.yml` — el guardián de los PRs
+### `integration.yml` — el guardián de los PRs
 
 > **Se dispara:** en cada `pull_request` (y a mano). · **Job:** `integrate` en `ubuntu-latest`.
 
@@ -66,7 +66,7 @@ Lo no evidente son los pasos 4 y 6: los tests **no tumban la ejecución al falla
 al paso 5 y comentar el resultado igualmente. Después ya lo hacemos fallar nosotros a propósito. Es la
 pipeline más vistosa, porque **se ejecuta sobre el PR que la revisa** y deja el comentario ahí mismo.
 
-### 🏗️ `build.yml` — entrenar y registrar
+### `build.yml` — entrenar y registrar
 
 > **Se dispara:** en `push` a `main` (y a mano). · Entrenar es caro, por eso solo aquí.
 
@@ -85,7 +85,7 @@ La clave está en el **orden de 9 y 10**: los tests van **antes** del registro. 
 la pipeline se corta en el 9 y **el 10 nunca se ejecuta** → un modelo malo no entra en el registro y,
 por tanto, tampoco se puede desplegar. El orden es la protección.
 
-### 🚀 `deploy.yml` — desplegar la API
+### `deploy.yml` — desplegar la API
 
 > **Se dispara:** solo a mano (`workflow_dispatch`). Desplegar es lo más delicado.
 
@@ -109,12 +109,12 @@ región `spaincentral`.
 
 ---
 
-## 🔑 Secretos y variables
+## Secretos y variables
 
-Ni una credencial vive en el código: todo entra por **secretos** (ocultos) y **variables** (visibles)
-del repo, en `Settings → Secrets and variables → Actions`.
+Ninguna credencial vive en el código: todo entra por los secretos y variables del repo, en
+`Settings → Secrets and variables → Actions`.
 
-### 🔒 Secretos (el valor va oculto, ni nosotros lo vemos)
+### Secretos
 
 | Nombre | Para qué |
 |---|---|
@@ -122,21 +122,19 @@ del repo, en `Settings → Secrets and variables → Actions`.
 | `AZURE_CREDENTIALS` | El JSON del *service principal*: con qué identidad entramos en Azure |
 | `GH_PAT` | La llave para subir la imagen a GHCR y que Azure pueda bajársela |
 
-### 👁️ Variables (el valor es visible)
+### Variables
 
 | Nombre | Valor | Para qué |
 |---|---|---|
-| `EXPERIMENT_NAME` | `grupo05-adult-income` | Cómo se llama el experimento en MLflow |
-| `MODEL_NAME` | `adult-income-classifier` | Cómo se registra el modelo (`build` lo guarda con ese nombre y `deploy` lo pide igual) |
+| `EXPERIMENT_NAME` | `grupo05-adult-income` | El experimento en MLflow |
+| `MODEL_NAME` | `adult-income-classifier` | El nombre con el que `build` registra el modelo y `deploy` lo pide |
 
-> ⚠️ Los valores de los **secretos** no se escriben **nunca** en un fichero (ni `.env`, ni notas): git
-> guarda el historial para siempre, así que si subes una credencial y la borras después, sigue ahí.
-> Solo se pegan a mano en la pantalla de Settings. Las **variables** sí pueden ir a la vista, porque no
-> son sensibles: son solo configuración.
+> Los secretos no se escriben nunca en un fichero: git guarda el historial para siempre, así que una
+> credencial que subes y borras después sigue estando ahí. Solo se pegan a mano en Settings.
 
 ---
 
-## 🤝 Contribución
+## Contribución
 
 En `main` **no se hace push directo**. Está protegida con un **rule set** (`Settings → Rules`) que
 exige: Pull Request obligatorio, **1 aprobación** de un compañero, y que el check `integrate` esté en
@@ -164,9 +162,9 @@ El ciclo que seguimos para cualquier cambio:
 
 ---
 
-## ⚙️ Instalación (para probarlo en local)
+## Instalación (para probarlo en local)
 
-En serio, lo suyo es verlo correr en las pipelines. Pero si quieres montarlo en tu máquina:
+Lo suyo es verlo correr en las pipelines. Pero si quieres montarlo en tu máquina:
 
 ```bash
 git clone https://github.com/TheJorgePG/pontia-mlops-IA0526-grupo5.git
@@ -188,7 +186,7 @@ Tests: `export PYTHONPATH=src && pytest unit_tests` (código) y `pytest model_te
 
 ---
 
-## 🌐 Uso
+## Uso
 
 ### Disparar las pipelines
 
@@ -218,12 +216,12 @@ curl -X POST https://<URL>/predict \
 | `GET`  | `/metrics` | Cuántas predicciones se han hecho |
 | `GET`  | `/docs`    | El Swagger |
 
-> 💡 Para la demo, haz **dos** predicciones (una de renta alta que dé `1` y otra de renta baja que dé
+> Para la demo, haz **dos** predicciones (una de renta alta que dé `1` y otra de renta baja que dé
 > `0`): con una sola no demuestras que el modelo distingue de verdad.
 
 ---
 
-## 🛠️ Tecnologías
+## Tecnologías
 
 | Ámbito | Lo que usamos |
 |---|---|
@@ -236,7 +234,7 @@ curl -X POST https://<URL>/predict \
 
 ---
 
-## 📄 Licencia
+## Licencia
 
 Licencia **MIT**: puedes usar, copiar, modificar y distribuir el código libremente manteniendo el
 aviso de copyright; se ofrece "tal cual", sin garantías. El *dataset* **Adult** procede del
@@ -244,7 +242,7 @@ aviso de copyright; se ofrece "tal cual", sin garantías. El *dataset* **Adult**
 
 ---
 
-## 🧗 Problemas que nos encontramos
+## Problemas que nos encontramos
 
 La parte más honesta del README. Nada de esto salió a la primera:
 
@@ -269,9 +267,9 @@ La parte más honesta del README. Nada de esto salió a la primera:
   que es lo que sí rompe la integración. Por consiguiente, en esa misma PR hubo **varios push seguidos**
   hasta dar con la tecla.
 
-> 🎥 Estos cuatro, contados en 20 segundos cada uno, van perfectos para el vídeo: demuestran que
+> Estos cuatro, contados en 20 segundos cada uno, van perfectos para el vídeo: demuestran que
 > entendimos **por qué** existe cada pieza y no que copiamos un YAML y ya.
 
 ---
 
-<p align="center"><sub>Proyecto de Introducción a DevOps · Grupo 05 💪</sub></p>
+<p align="center"><sub>Proyecto de Introducción a DevOps · Grupo 05</sub></p>
