@@ -1,11 +1,13 @@
 # Adult Income — Proyecto de DevOps · Grupo 05
 
-Proyecto de la asignatura de **Introducción a DevOps**. Sí, por debajo hay un modelo de *machine
-learning* que predice si una persona gana más o menos de 50.000 $ al año… pero **eso es lo de menos**.
+Entrega de la asignatura de **Introducción a DevOps**. El proyecto es un modelo de *machine learning*
+que predice si una persona gana más o menos de 50.000 $ al año a partir de datos del censo de EE. UU.,
+pero el modelo es lo de menos: **lo que se trabaja aquí es la metodología DevOps** que lo rodea.
 
-Lo que de verdad va este repo es de **CI/CD**: montar tres pipelines de GitHub Actions que se encargan
-de probar el código en cada Pull Request, entrenar y registrar el modelo cuando algo entra en `main`, y
-desplegar una API en Azure con un botón. El modelo es la excusa; **el trabajo está en los workflows**.
+Alrededor de un modelo deliberadamente sencillo (un RandomForest) montamos toda la maquinaria de un
+entorno real de trabajo en equipo: tests automáticos ante cada cambio, credenciales fuera del código,
+entrenamiento y registro del modelo automatizados, y el despliegue de una API a la nube. Todo ello a
+través de tres pipelines de **integración y despliegue continuos** (CI/CD) sobre GitHub Actions.
 
 <p align="center">
   <img alt="GitHub Actions" src="https://img.shields.io/badge/GitHub%20Actions-2088FF?logo=githubactions&logoColor=white">
@@ -17,154 +19,145 @@ desplegar una API en Azure con un botón. El modelo es la excusa; **el trabajo e
 
 ---
 
-## Estado del proyecto
+## Descripción
 
-**Terminado y entregable.** Las tres pipelines funcionan y la `main` está protegida.
+El proyecto pone en práctica los pilares de DevOps aplicados a un caso de MLOps:
 
-| Pipeline | Cuándo salta | Qué hace |
-|---|---|---|
-| `integration` | en cada Pull Request | Corre los tests y los comenta en el PR |
-| `build` | al mergear a `main` | Entrena, valida y registra el modelo |
-| `deploy` | a mano (botón) | Construye la imagen y despliega la API |
+| Concepto | Cómo se aplica en el proyecto |
+|---|---|
+| **Integración continua (CI)** | Los tests se ejecutan solos en cada Pull Request y bloquean el *merge* si algo falla |
+| **Despliegue continuo (CD)** | El despliegue de la API es un workflow: construye la imagen y la publica en Azure |
+| **Testing automatizado** | Tests unitarios del código, y tests de calidad sobre el modelo ya entrenado |
+| **Gestión de secretos y variables** | Las credenciales de Azure y la configuración viven fuera del código |
+| **Entrenamiento reproducible** | El modelo se entrena, versiona y registra en Azure ML mediante MLflow |
 
-> Por el camino nos peleamos con unas cuantas cosas. Lo contamos tal cual pasó en
-> [Problemas que nos encontramos](#problemas-que-nos-encontramos).
+El *dataset* es el **Adult / Census Income** del repositorio de la UCI, y el modelo es un
+`RandomForestClassifier` que clasifica la renta en dos clases (`>50K` / `<=50K`).
 
 ---
 
-## Las tres pipelines (esto es lo importante)
+## Estado del proyecto
 
-Están en [`.github/workflows/`](.github/workflows/). La idea de conjunto es esta:
+**Terminado y entregable.** Las tres pipelines funcionan, el modelo se entrena y se registra en Azure
+Machine Learning, y la API queda desplegada en una Azure Container App.
+
+| Pipeline | Se ejecuta | Función |
+|---|---|---|
+| `integration` | en cada Pull Request | Ejecuta los tests y comenta el resultado en el PR |
+| `build` | al integrar en `main` | Entrena, valida y registra el modelo |
+| `deploy` | manualmente | Construye la imagen y despliega la API |
+
+---
+
+## Cómo funciona
+
+El proyecto encadena las tres pipelines a lo largo del ciclo de vida del modelo:
 
 ```
-   Abres un Pull Request  ─────►  integration.yml   corre los unit tests y los comenta en el PR
-                                                     (si fallan → bloquea el merge)
+   Pull Request  ────►  integration.yml   ejecuta los unit tests y comenta el resultado en el PR;
+                                           si fallan, el merge queda bloqueado
 
-   Se mergea a main       ─────►  build.yml         entrena el modelo, lo valida (accuracy ≥ 0.80)
-                                                     y lo registra en Azure ML como "Production"
+   Merge a main  ────►  build.yml         entrena el modelo, comprueba que su accuracy ≥ 0.80
+                                           y lo registra en Azure ML en el stage "Production"
 
-   Le damos al botón      ─────►  deploy.yml         imagen Docker → GHCR → Azure Container Apps
+   Despliegue    ────►  deploy.yml        empaqueta la API en una imagen Docker, la publica en
+                                           GHCR y la despliega en Azure Container Apps
 ```
 
-Y la pieza que hace que todo esto sirva de algo: **nadie hace push directo a `main`** (ver
-[Contribución](#contribución)).
+La rama `main` está protegida, de modo que ningún cambio llega a producción sin haber pasado por los
+tests y por la revisión de un compañero.
 
-### `integration.yml` — el guardián de los PRs
+---
 
-> **Se dispara:** en cada `pull_request` (y a mano). · **Job:** `integrate` en `ubuntu-latest`.
+## Los workflows
 
-| # | Paso | Qué hace |
-|---|------|----------|
-| 1 | Checkout | La máquina viene vacía: se trae el repo |
-| 2 | Setup Python 3.10 | …tampoco trae Python |
-| 3 | Install deps | `pip install -r requirements.txt` |
-| 4 | **Unit tests** | `pytest unit_tests` con coverage, **sin morirse si fallan** (`continue-on-error`) |
-| 5 | **Comentar en el PR** | Un bot publica el resultado de los tests **dentro del propio Pull Request** |
-| 6 | **Fallar si tocaba** | Si los tests fallaron, `exit 1` → el rule set bloquea el merge |
+Son el núcleo del proyecto y están en [`.github/workflows/`](.github/workflows/).
 
-Lo no evidente son los pasos 4 y 6: los tests **no tumban la ejecución al fallar**, para poder llegar
-al paso 5 y comentar el resultado igualmente. Después ya lo hacemos fallar nosotros a propósito. Es la
-pipeline más vistosa, porque **se ejecuta sobre el PR que la revisa** y deja el comentario ahí mismo.
+### integration.yml — validación en cada Pull Request
 
-### `build.yml` — entrenar y registrar
+Se dispara con cada `pull_request`. Levanta un entorno con Python 3.10, instala las dependencias y
+ejecuta los **tests unitarios** del código con cobertura. Un detalle de diseño: los tests están
+configurados para **no cortar la ejecución si fallan**, de forma que la pipeline pueda llegar igualmente
+a publicar sus resultados como **comentario dentro del propio Pull Request**. Solo después, en un paso
+final, la pipeline se marca como fallida si los tests no pasaron, y es esa marca la que impide el
+*merge*. Así, el revisor ve el resultado de los tests sin salir del PR.
 
-> **Se dispara:** en `push` a `main` (y a mano). · Entrenar es caro, por eso solo aquí.
+### build.yml — entrenamiento y registro del modelo
 
-| # | Paso | Qué hace |
-|---|------|----------|
-| 1 | `RUN_NAME` con fecha | Para distinguir cada entrenamiento en MLflow |
-| 2-4 | Checkout · Python · deps | Lo de siempre |
-| 5 | **Login en Azure** | `azure/login` — sin identidad, MLflow no puede subir nada |
-| 6 | Descargar el dataset | Los datos **no están en git**, se bajan de la UCI |
-| 7 | **Entrenar** | `python src/main.py` → genera los `.pkl` y el `run_id.txt` |
-| 8 | Guardar `RUN_ID` | Lo lee del fichero y lo pasa a los pasos siguientes |
-| 9 | **Tests del modelo** | El *quality gate*: ¿*accuracy* ≥ 0.80? |
-| 10 | **Registrar en MLflow** | Sube el modelo a Azure ML, stage `Production` |
+Se dispara cuando un cambio entra en `main`. Se autentica en Azure, descarga el *dataset* de la UCI
+(los datos no se versionan en git) y entrena el modelo con `src/main.py`, que registra el experimento
+en MLflow. A continuación ejecuta los **tests del modelo** —el *quality gate*— que exigen una *accuracy*
+mínima de 0.80. Solo si el modelo supera ese umbral, el último paso lo **registra en Azure ML** y lo
+promociona al stage `Production`. El orden importa: la validación va **antes** del registro, así que un
+modelo que no dé la talla nunca llega a registrarse y, por tanto, tampoco puede desplegarse.
 
-La clave está en el **orden de 9 y 10**: los tests van **antes** del registro. Si el modelo sale malo,
-la pipeline se corta en el 9 y **el 10 nunca se ejecuta** → un modelo malo no entra en el registro y,
-por tanto, tampoco se puede desplegar. El orden es la protección.
+### deploy.yml — despliegue de la API
 
-### `deploy.yml` — desplegar la API
+Se lanza manualmente, porque desplegar es la operación más delicada. Construye la **imagen Docker** de
+la API y la sube al GitHub Container Registry con dos etiquetas (`latest` y el número de ejecución, que
+permite volver a una versión anterior). Después despliega esa imagen en la **Azure Container App**,
+pasándole por variables de entorno la dirección de MLflow y las credenciales, porque la imagen no lleva
+el modelo dentro: la API se lo descarga de Azure ML al arrancar. Por eso la pipeline no termina cuando
+Azure acepta el despliegue, sino que **espera a que el endpoint `/health` responda `200`**, que es la
+única señal fiable de que la API está viva y con el modelo cargado.
 
-> **Se dispara:** solo a mano (`workflow_dispatch`). Desplegar es lo más delicado.
-
-| # | Paso | Qué hace |
-|---|------|----------|
-| 1 | Checkout | Necesita el `Dockerfile` y `deployment/app` |
-| 2 | Login en `ghcr.io` | El almacén de imágenes de GitHub — usa el `GH_PAT` |
-| 3 | Nombre a minúsculas | `ghcr.io` no admite mayúsculas y el repo sí las tiene |
-| 4 | **Build & push** | La imagen con **dos etiquetas**: `:latest` y `:<nº de run>` (para rollback) |
-| 5 | Login en Azure | Otra autenticación, contra otro servicio |
-| 6 | **Desplegar** | Le da a la Container App la imagen nueva + las variables de entorno |
-| 7 | **Esperar al `/health`** | Hace *polling* hasta que la API responde `200` (hasta 30 intentos) |
-| 8 | Imprimir la URL | Del Swagger, para no buscarla en el portal de Azure |
-
-Dos cosas que no son adorno: la imagen **no lleva el modelo dentro** (la API se lo baja de Azure ML al
-arrancar), y el paso 7 es imprescindible porque Azure puede decir "recibido" y **luego** tener la API
-caída mientras descarga el modelo.
-
-**Infra del grupo 05:** Container App `ca-ml-api-grupo05` · resource group `rg-gcortina-devops` ·
-región `spaincentral`.
+**Infraestructura del grupo 05:** Container App `ca-ml-api-grupo05`, resource group
+`rg-gcortina-devops`, región `spaincentral`.
 
 ---
 
 ## Secretos y variables
 
-Ninguna credencial vive en el código: todo entra por los secretos y variables del repo, en
-`Settings → Secrets and variables → Actions`.
+Ninguna credencial vive en el código. La información sensible se gestiona como **secretos** de GitHub
+Actions y la configuración no sensible como **variables**:
 
-### Secretos
+**Secretos**
 
-| Nombre | Para qué |
+| Nombre | Contenido |
 |---|---|
-| `MLFLOW_TRACKING_URL` | La dirección del MLflow de Azure (dónde subir/bajar el modelo) |
-| `AZURE_CREDENTIALS` | El JSON del *service principal*: con qué identidad entramos en Azure |
-| `GH_PAT` | La llave para subir la imagen a GHCR y que Azure pueda bajársela |
+| `MLFLOW_TRACKING_URL` | Dirección del servidor de MLflow en Azure |
+| `AZURE_CREDENTIALS` | Credenciales del *service principal* con el que se accede a Azure |
+| `GH_PAT` | Token para publicar y descargar la imagen en el Container Registry |
 
-### Variables
+**Variables**
 
-| Nombre | Valor | Para qué |
+| Nombre | Valor | Uso |
 |---|---|---|
-| `EXPERIMENT_NAME` | `grupo05-adult-income` | El experimento en MLflow |
-| `MODEL_NAME` | `adult-income-classifier` | El nombre con el que `build` registra el modelo y `deploy` lo pide |
-
-> Los secretos no se escriben nunca en un fichero: git guarda el historial para siempre, así que una
-> credencial que subes y borras después sigue estando ahí. Solo se pegan a mano en Settings.
+| `EXPERIMENT_NAME` | `grupo05-adult-income` | Nombre del experimento en MLflow |
+| `MODEL_NAME` | `adult-income-classifier` | Nombre con el que se registra el modelo y con el que la API lo solicita |
 
 ---
 
-## Contribución
+## Estructura del repositorio
 
-En `main` **no se hace push directo**. Está protegida con un **rule set** (`Settings → Rules`) que
-exige: Pull Request obligatorio, **1 aprobación** de un compañero, y que el check `integrate` esté en
-verde. Además bloquea `force push` y el borrado de la rama.
-
-El ciclo que seguimos para cualquier cambio:
-
-1. **Partir de `main` actualizado** y crear rama:
-   ```bash
-   git checkout main && git pull
-   git checkout -b feat/mi-mejora
-   ```
-2. **Hacer el cambio**, comprobar los tests en local:
-   ```bash
-   export PYTHONPATH=src && pytest unit_tests
-   ```
-3. **Subir la rama y abrir el PR** hacia `main`:
-   ```bash
-   git push -u origin feat/mi-mejora
-   ```
-   Al abrirlo salta sola la pipeline `integration` y el bot deja los resultados comentados en el PR.
-4. **Pedir el code review** a un compañero. Ojo: **no puedes aprobar tu propio PR**, así que nos lo
-   repartimos: cada uno abre uno y revisa el del otro.
-5. Aprobado y en verde → **merge**. Al entrar en `main`, salta `build`.
+```
+.github/workflows/     Las tres pipelines: integration, build y deploy
+src/                   Código de entrenamiento (carga de datos, modelo, evaluación)
+scripts/               Registro del modelo en MLflow
+deployment/            Dockerfile y la API (FastAPI) que se despliega
+unit_tests/            Tests del código, que corren en cada Pull Request
+model_tests/           Tests de calidad del modelo entrenado
+```
 
 ---
 
-## Instalación (para probarlo en local)
+## Tecnologías
 
-Lo suyo es verlo correr en las pipelines. Pero si quieres montarlo en tu máquina:
+| Ámbito | Herramientas |
+|---|---|
+| **CI/CD** | GitHub Actions |
+| **Contenedores** | Docker + GitHub Container Registry |
+| **Despliegue** | Azure Container Apps |
+| **Registro de modelos** | MLflow sobre Azure Machine Learning |
+| **API** | FastAPI + Uvicorn |
+| **Modelo y datos** | Python 3.10, scikit-learn, pandas, NumPy |
+| **Testing** | pytest |
+
+---
+
+## Instalación
+
+Para reproducir el entrenamiento en local hacen falta **Python 3.10** y **Git**:
 
 ```bash
 git clone https://github.com/TheJorgePG/pontia-mlops-IA0526-grupo5.git
@@ -174,33 +167,23 @@ python -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# El dataset no está en git (va en el .gitignore)
+# El dataset no se versiona (está en el .gitignore)
 mkdir -p data/raw
 curl -o data/raw/adult.data https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data
 curl -o data/raw/adult.test https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test
 
-python src/main.py             # entrena y deja los .pkl en models/
+python src/main.py             # entrena y guarda el modelo en models/
 ```
-
-Tests: `export PYTHONPATH=src && pytest unit_tests` (código) y `pytest model_tests` (modelo entrenado).
 
 ---
 
 ## Uso
 
-### Disparar las pipelines
-
-- `integration` → se lanza sola al abrir un PR (o `Actions → integration → Run workflow`).
-- `build` → se lanza sola al mergear a `main` (o a mano).
-- `deploy` → `Actions → deploy model → Run workflow`. El último paso **imprime la URL** del Swagger.
-
-### Usar la API ya desplegada
+El uso normal del proyecto es a través de la API desplegada. Devuelve la predicción de renta a partir
+de los datos de una persona:
 
 ```bash
-curl https://<URL-QUE-IMPRIMIO-EL-DEPLOY>/health
-# { "status": "ok", "worker_state": "ready", "model_loaded": true }
-
-curl -X POST https://<URL>/predict \
+curl -X POST https://<URL-DE-LA-API>/predict \
   -H "Content-Type: application/json" \
   -d '{ "age": 52, "workclass": "Self-emp-inc", "fnlwgt": 287927, "education": "Doctorate",
         "education-num": 16, "marital-status": "Married-civ-spouse", "occupation": "Exec-managerial",
@@ -209,66 +192,54 @@ curl -X POST https://<URL>/predict \
 # { "prediction": [1] }   ← 1 = gana más de 50.000 $ · 0 = 50.000 $ o menos
 ```
 
-| Método | Ruta | Qué hace |
-|--------|------|----------|
-| `GET`  | `/health`  | Si el servicio está vivo y si el modelo está cargado |
-| `POST` | `/predict` | La predicción de ingresos |
-| `GET`  | `/metrics` | Cuántas predicciones se han hecho |
-| `GET`  | `/docs`    | El Swagger |
-
-> Para la demo, haz **dos** predicciones (una de renta alta que dé `1` y otra de renta baja que dé
-> `0`): con una sola no demuestras que el modelo distingue de verdad.
+| Método | Ruta | Función |
+|--------|------|---------|
+| `GET`  | `/health`  | Estado del servicio e indica si el modelo está cargado |
+| `POST` | `/predict` | Predicción de renta a partir de los datos de entrada |
+| `GET`  | `/metrics` | Número total de predicciones realizadas |
+| `GET`  | `/docs`    | Documentación interactiva (Swagger) |
 
 ---
 
-## Tecnologías
+## Contribución
 
-| Ámbito | Lo que usamos |
-|---|---|
-| **CI/CD** | GitHub Actions (workflows en YAML) |
-| **Contenedores** | Docker + GitHub Container Registry (`ghcr.io`) |
-| **Despliegue** | Azure Container Apps |
-| **Tracking / registro de modelos** | MLflow sobre Azure Machine Learning |
-| **API** | FastAPI + Uvicorn |
-| **Lenguaje / ML / Testing** | Python 3.10 · scikit-learn, pandas, NumPy · pytest |
+El repositorio está pensado para trabajo en equipo con la rama `main` protegida. Ningún cambio se
+integra directamente en `main`: todo pasa por un **Pull Request** que requiere la **aprobación de al
+menos un compañero** (code review) y que la pipeline `integration` esté en verde. La protección de la
+rama impide además reescribir o borrar su historial. Este flujo es lo que garantiza que un cambio que
+rompa el modelo o los tests se detecte **antes** de llegar a producción, y no después.
 
 ---
 
 ## Licencia
 
-Licencia **MIT**: puedes usar, copiar, modificar y distribuir el código libremente manteniendo el
-aviso de copyright; se ofrece "tal cual", sin garantías. El *dataset* **Adult** procede del
+Licencia **MIT**: el código puede usarse, copiarse, modificarse y distribuirse libremente manteniendo
+el aviso de copyright, y se ofrece "tal cual", sin garantías. El *dataset* **Adult** procede del
 [UCI Machine Learning Repository](https://archive.ics.uci.edu/dataset/2/adult) (CC BY 4.0).
 
 ---
 
 ## Problemas que nos encontramos
 
-La parte más honesta del README. Nada de esto salió a la primera:
+Recogemos aquí las dificultades reales que tuvimos durante el desarrollo, porque forman parte del
+aprendizaje del proyecto:
 
-- **No nos aclarábamos con las contribuciones por culpa de las invitaciones.** Entre invitar a los
-  compañeros al repo y que cada uno aceptara y quedara con el rol correcto, nos hicimos un lío al
-  principio con quién podía hacer qué.
+- **Contribuciones e invitaciones.** Al principio nos costó cuadrar las invitaciones de colaborador y
+  que cada miembro quedara con el rol correcto, lo que generó confusión sobre quién podía hacer qué.
 
-- **Los permisos para aprobar no funcionaban → montamos una organización.** No había forma de que los
-  permisos dejaran aprobar los Pull Requests como queríamos. Lo resolvimos **creando una organización**
-  y moviendo el repo ahí; con la organización sí pudimos gestionar bien quién aprueba qué.
+- **Permisos de aprobación y organización.** Los permisos no dejaban aprobar los Pull Requests como
+  necesitábamos. Lo resolvimos creando una **organización** y alojando el repositorio en ella, lo que
+  nos permitió gestionar correctamente las aprobaciones.
 
-- **Quisimos reducir el "límite salarial" y no lo conseguimos resolver.** En un PR probamos a bajar el
-  umbral de `>50K` a `>20K` en el preprocesado. El problema es que en este dataset la etiqueta es
-  **literalmente el texto** `>50K` / `<=50K`, así que al comparar contra `>20K` **nada coincide** y
-  todas las filas se iban a `0`. Aprendimos que ahí no se comparaba un número, sino una cadena tal cual
-  viene del CSV.
+- **Cambio del umbral de renta.** Quisimos bajar el umbral de `>50K` a `>20K` en el preprocesado, pero
+  no producía el efecto esperado: en este *dataset* la etiqueta es el texto literal `>50K` / `<=50K`,
+  de modo que al compararla con `>20K` no coincidía ninguna fila y todas se clasificaban como `0`.
 
-- **Forzar un error de verdad costó más de lo que parecía.** Queríamos validar que **con un error no se
-  puede aprobar un Pull Request**. Primero probamos a **quitar una librería**… y `integration` no dio
-  ningún error (no pasaba por ahí). Entonces **forzamos un error más grave**, pero el pipeline de
-  integración tampoco pasaba por ese punto. Al final **forzamos un error directamente en los tests**,
-  que es lo que sí rompe la integración. Por consiguiente, en esa misma PR hubo **varios push seguidos**
-  hasta dar con la tecla.
-
-> Estos cuatro, contados en 20 segundos cada uno, van perfectos para el vídeo: demuestran que
-> entendimos **por qué** existe cada pieza y no que copiamos un YAML y ya.
+- **Forzar un fallo para probar la protección.** Queríamos comprobar que un error impide aprobar un
+  Pull Request. Al quitar una librería, la pipeline `integration` no lo detectó, porque su ejecución no
+  pasa por ese punto; lo mismo ocurrió con un error más grave. Finalmente **provocamos el fallo en los
+  propios tests**, que sí rompe la integración. Por eso en ese Pull Request quedan **varios push
+  seguidos**, correspondientes a cada intento.
 
 ---
 
