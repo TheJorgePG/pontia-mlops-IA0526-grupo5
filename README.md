@@ -114,17 +114,25 @@ región `spaincentral`.
 Ni una credencial vive en el código: todo entra por **secretos** (ocultos) y **variables** (visibles)
 del repo, en `Settings → Secrets and variables → Actions`.
 
-| Nombre | Tipo | Para qué |
-|---|---|---|
-| `MLFLOW_TRACKING_URL` | 🔒 Secreto | La dirección del MLflow de Azure (dónde subir/bajar el modelo) |
-| `AZURE_CREDENTIALS` | 🔒 Secreto | El JSON del *service principal*: con qué identidad entramos en Azure |
-| `GH_PAT` | 🔒 Secreto | La llave para subir la imagen a GHCR y que Azure pueda bajársela |
-| `EXPERIMENT_NAME` | 👁️ Variable | Cómo se llama el experimento en MLflow |
-| `MODEL_NAME` | 👁️ Variable | Cómo se registra el modelo (`build` lo guarda, `deploy` lo pide con ese nombre) |
+### 🔒 Secretos (el valor va oculto, ni nosotros lo vemos)
 
-> ⚠️ Los valores **nunca** se escriben en un fichero (ni `.env`, ni notas). Git guarda el historial
-> para siempre: si subes una credencial y la borras después, sigue ahí. Solo se pegan a mano en la
-> pantalla de Settings.
+| Nombre | Para qué |
+|---|---|
+| `MLFLOW_TRACKING_URL` | La dirección del MLflow de Azure (dónde subir/bajar el modelo) |
+| `AZURE_CREDENTIALS` | El JSON del *service principal*: con qué identidad entramos en Azure |
+| `GH_PAT` | La llave para subir la imagen a GHCR y que Azure pueda bajársela |
+
+### 👁️ Variables (el valor es visible)
+
+| Nombre | Valor | Para qué |
+|---|---|---|
+| `EXPERIMENT_NAME` | `grupo05-adult-income` | Cómo se llama el experimento en MLflow |
+| `MODEL_NAME` | `adult-income-classifier` | Cómo se registra el modelo (`build` lo guarda con ese nombre y `deploy` lo pide igual) |
+
+> ⚠️ Los valores de los **secretos** no se escriben **nunca** en un fichero (ni `.env`, ni notas): git
+> guarda el historial para siempre, así que si subes una credencial y la borras después, sigue ahí.
+> Solo se pegan a mano en la pantalla de Settings. Las **variables** sí pueden ir a la vista, porque no
+> son sensibles: son solo configuración.
 
 ---
 
@@ -240,24 +248,28 @@ aviso de copyright; se ofrece "tal cual", sin garantías. El *dataset* **Adult**
 
 La parte más honesta del README. Nada de esto salió a la primera:
 
-- **Los permisos y las invitaciones nos volvieron locos.** Al principio no había forma de que las
-  invitaciones de colaborador dieran los permisos correctos para aprobar Pull Requests. Lo resolvimos
-  **creando una organización** y moviendo el repo ahí; con la organización sí pudimos gestionar bien
-  quién aprueba qué.
+- **No nos aclarábamos con las contribuciones por culpa de las invitaciones.** Entre invitar a los
+  compañeros al repo y que cada uno aceptara y quedara con el rol correcto, nos hicimos un lío al
+  principio con quién podía hacer qué.
 
-- **Quisimos bajar el "límite salarial" y no salió.** En un PR probamos a cambiar el umbral de `>50K`
-  a `>20K` en el preprocesado. El problema es que en este dataset la etiqueta es **literalmente el
-  texto** `>50K` / `<=50K`, así que al comparar contra `>20K` **nada coincide** y todas las filas se
-  iban a `0`. Aprendimos que ahí no se comparaba un número, sino una cadena tal cual viene del CSV.
+- **Los permisos para aprobar no funcionaban → montamos una organización.** No había forma de que los
+  permisos dejaran aprobar los Pull Requests como queríamos. Lo resolvimos **creando una organización**
+  y moviendo el repo ahí; con la organización sí pudimos gestionar bien quién aprueba qué.
 
-- **Forzar un error de verdad costó más de lo que parecía.** Queríamos demostrar que, con un fallo, la
-  integración **no deja aprobar** el PR. Primero probamos a **quitar una librería**… y `integration`
-  ni se inmutó (no pasaba por ahí). Metimos un error más gordo y tampoco. Al final entendimos por dónde
-  pasa realmente el pipeline y **forzamos el fallo directamente en los tests**, que es lo que sí rompe
-  la integración. Por eso en esa PR se ven **varios push seguidos**: son nuestros intentos hasta dar
-  con la tecla.
+- **Quisimos reducir el "límite salarial" y no lo conseguimos resolver.** En un PR probamos a bajar el
+  umbral de `>50K` a `>20K` en el preprocesado. El problema es que en este dataset la etiqueta es
+  **literalmente el texto** `>50K` / `<=50K`, así que al comparar contra `>20K` **nada coincide** y
+  todas las filas se iban a `0`. Aprendimos que ahí no se comparaba un número, sino una cadena tal cual
+  viene del CSV.
 
-> 🎥 Estos tres, contados en 20 segundos cada uno, van perfectos para el vídeo: demuestran que
+- **Forzar un error de verdad costó más de lo que parecía.** Queríamos validar que **con un error no se
+  puede aprobar un Pull Request**. Primero probamos a **quitar una librería**… y `integration` no dio
+  ningún error (no pasaba por ahí). Entonces **forzamos un error más grave**, pero el pipeline de
+  integración tampoco pasaba por ese punto. Al final **forzamos un error directamente en los tests**,
+  que es lo que sí rompe la integración. Por consiguiente, en esa misma PR hubo **varios push seguidos**
+  hasta dar con la tecla.
+
+> 🎥 Estos cuatro, contados en 20 segundos cada uno, van perfectos para el vídeo: demuestran que
 > entendimos **por qué** existe cada pieza y no que copiamos un YAML y ya.
 
 ---
