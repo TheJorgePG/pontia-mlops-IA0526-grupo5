@@ -241,6 +241,17 @@ aprendizaje del proyecto:
   propios tests**, que sí rompe la integración. Por eso en ese Pull Request quedan **varios push
   seguidos**, correspondientes a cada intento.
 
+- **Fallo con workflow deploy.**
+  Revertimos los límites a `>50K` en el código para que volviera a funcionar, y al probar el deploy no funcionaba
+  porque nos caducó el token utilizado para el secreto GH_PAT, ampliamos el token se realizaron pruebas 
+  pero no funcionaban los cambios y nos dimos cuenta que teníamos que regenerar el token y añadirlo de nuevo.
+
+## Vídeo explicativo de la práctica
+
+  Subimos el vídeo al repositorio, que se puede consultar en este enlace: 
+  
+  <video controls src="pontia-mlops-IA0526-grupo5.mp4" title="Vídeo grupo5"></video>
+
 ---
 
 <p align="center"><sub>Proyecto de Introducción a DevOps · Grupo 05</sub></p>
